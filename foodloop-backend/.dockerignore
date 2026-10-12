@@ -1,0 +1,15 @@
+target/
+.mvn/
+mvnw
+mvnw.cmd
+.git
+.gitignore
+.dockerignore
+.env
+.env.*
+*.md
+.vscode/
+.idea/
+.settings/
+.project
+.classpath

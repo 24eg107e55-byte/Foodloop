@@ -2,6 +2,7 @@
 import { useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
+import { API_BASE_URL } from "../api";
 import "./DonateFood.css";
 
 // Earliest selectable pickup time, formatted for a datetime-local input.
@@ -60,7 +61,7 @@ function DonateFood() {
             };
 
             const response = await axios.post(
-                "http://localhost:8080/api/donations",
+                `${API_BASE_URL}/api/donations`,
                 donation,
                 {
                     headers: {

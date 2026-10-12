@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
+import { API_BASE_URL } from "../api";
 import "./MyDonations.css";
 
 function MyDonations() {
@@ -27,7 +28,7 @@ function MyDonations() {
       }
 
       const response = await axios.get(
-        "http://localhost:8080/api/donations/my-donations",
+        `${API_BASE_URL}/api/donations/my-donations`,
         {
           headers: {
             Authorization: `Bearer ${user.token}`,

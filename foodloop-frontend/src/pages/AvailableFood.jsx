@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
+import { API_BASE_URL } from "../api";
 import "./AvailableFood.css";
 
 function AvailableFood() {
@@ -30,7 +31,7 @@ function AvailableFood() {
 
   const fetchFood = async () => {
     const response = await axios.get(
-      "http://localhost:8080/api/donations/available",
+      `${API_BASE_URL}/api/donations/available`,
       { headers }
     );
 
@@ -44,7 +45,7 @@ function AvailableFood() {
 
     try {
       const response = await axios.get(
-        "http://localhost:8080/api/food-requests/my-requests",
+        `${API_BASE_URL}/api/food-requests/my-requests`,
         { headers }
       );
 
@@ -145,7 +146,7 @@ function AvailableFood() {
 
     try {
       const response = await axios.post(
-        `http://localhost:8080/api/food-requests/${foodId}`,
+        `${API_BASE_URL}/api/food-requests/${foodId}`,
         {},
         {
           headers: {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
+import { API_BASE_URL } from "./api";
 
 function MyFoodRequests() {
   const [requests, setRequests] = useState([]);
@@ -24,7 +25,7 @@ function MyFoodRequests() {
 
     try {
       const response = await axios.get(
-        "http://localhost:8080/api/food-requests/my-requests",
+        `${API_BASE_URL}/api/food-requests/my-requests`,
         {
           headers: {
             Authorization: `Bearer ${user.token}`,

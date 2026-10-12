@@ -1,0 +1,35 @@
+# Secrets and environment configurations
+.env
+.env.*
+!.env.example
+
+# Build outputs
+target/
+dist/
+dist-ssr/
+build/
+
+# Dependency directories
+node_modules/
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.iml
+*.iws
+*.ipr
+.settings/
+.classpath
+.project
+
+# OS generated files
+.DS_Store
+Thumbs.db

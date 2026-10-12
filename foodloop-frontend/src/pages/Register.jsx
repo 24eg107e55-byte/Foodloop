@@ -1,6 +1,7 @@
 import { useState } from "react";
 import axios from "axios";
 import { Link, useNavigate } from "react-router-dom";
+import { API_BASE_URL } from "../api";
 
 function Register() {
     const navigate = useNavigate();
@@ -30,7 +31,7 @@ function Register() {
 
         try {
             const response = await axios.post(
-                "http://localhost:8080/api/auth/register",
+                `${API_BASE_URL}/api/auth/register`,
                 formData
             );
 
@@ -53,7 +54,7 @@ function Register() {
                 );
             } else if (error.request) {
                 setMessage(
-                    "Cannot connect to backend. Check if Spring Boot is running on port 8080."
+                    "Cannot connect to backend. Check if the server is running."
                 );
             } else {
                 setMessage("Something went wrong.");
