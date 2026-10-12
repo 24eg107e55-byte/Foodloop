@@ -1,0 +1,230 @@
+
+/* FoodLoop - Donate Food Page */
+
+.donate-page {
+    min-height: 100vh;
+    box-sizing: border-box;
+    padding: 40px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+        radial-gradient(circle at top left, #e0f2df, transparent 38%),
+        linear-gradient(135deg, #f5f8f2, #edf5e9);
+    color: #263b2d;
+    font-family: "DM Sans", "Nunito", Arial, sans-serif;
+}
+
+.donate-box {
+    width: 100%;
+    max-width: 620px;
+    box-sizing: border-box;
+    padding: 38px;
+    background: #ffffff;
+    border: 1px solid #e3eadf;
+    border-radius: 22px;
+    box-shadow: 0 15px 45px rgba(35, 75, 44, 0.09);
+    animation: donate-appear 0.45s ease-out;
+}
+
+.donate-icon {
+    width: 58px;
+    height: 58px;
+    display: grid;
+    place-items: center;
+    margin-bottom: 18px;
+    border-radius: 17px;
+    background: #e5f4e5;
+    font-size: 29px;
+}
+
+.donate-eyebrow {
+    color: #338553;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 2px;
+}
+
+.donate-box h1 {
+    margin: 12px 0 10px;
+    color: #205c37;
+    font-size: clamp(27px, 4vw, 35px);
+    font-weight: 800;
+}
+
+.donate-subtitle {
+    margin: 0 0 26px;
+    color: #718073;
+    font-size: 14px;
+    line-height: 1.8;
+}
+
+.donate-form {
+    display: grid;
+    gap: 9px;
+}
+
+.donate-form label {
+    margin-top: 9px;
+    color: #344c39;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.donate-form input,
+.donate-form textarea {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: 13px 14px;
+    border: 1px solid #dce6d9;
+    border-radius: 10px;
+    outline: none;
+    background: #fbfdf9;
+    color: #263b2d;
+    font-family: inherit;
+    font-size: 14px;
+    transition: border-color 0.2s, box-shadow 0.2s,
+        background 0.2s;
+}
+
+.donate-form textarea {
+    min-height: 105px;
+    resize: vertical;
+    line-height: 1.6;
+}
+
+.donate-form input:focus,
+.donate-form textarea:focus {
+    border-color: #32945a;
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(50, 148, 90, 0.12);
+}
+
+.donate-form input::placeholder,
+.donate-form textarea::placeholder {
+    color: #9aa69b;
+}
+
+.donate-submit-btn {
+    width: 100%;
+    margin-top: 19px;
+    padding: 15px;
+    border: none;
+    border-radius: 11px;
+    background: #23804a;
+    color: #ffffff;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.2s,
+        box-shadow 0.2s;
+}
+
+.donate-submit-btn:hover:not(:disabled) {
+    background: #176437;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(35, 128, 74, 0.2);
+}
+
+.donate-submit-btn:focus-visible,
+.donate-back-link:focus-visible {
+    outline: 3px solid #77c98f;
+    outline-offset: 3px;
+}
+
+.donate-submit-btn:disabled {
+    opacity: 0.65;
+    cursor: wait;
+    transform: none;
+}
+
+.donate-message {
+    margin: 18px 0 0;
+    padding: 13px 15px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    font-size: 14px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+.donate-message.success {
+    background: #e5f6e9;
+    border-color: #bbebc8;
+    color: #166534;
+}
+
+.donate-message.error {
+    background: #feecec;
+    border-color: #fecaca;
+    color: #a12626;
+}
+
+.donate-bottom {
+    margin-top: 23px;
+    padding-top: 19px;
+    border-top: 1px solid #edf1ea;
+}
+
+.donate-back-link {
+    display: inline-block;
+    color: #287746;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.donate-back-link:hover {
+    text-decoration: underline;
+}
+
+.donate-footer {
+    margin: 22px 0 0;
+    color: #819083;
+    font-size: 12px;
+    text-align: center;
+}
+
+@keyframes donate-appear {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (max-width: 520px) {
+    .donate-page {
+        padding: 20px 12px;
+        align-items: flex-start;
+    }
+
+    .donate-box {
+        margin: auto 0;
+        padding: 25px 20px;
+        border-radius: 17px;
+    }
+
+    .donate-form input,
+    .donate-form textarea {
+        font-size: 16px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .donate-box {
+        animation: none;
+    }
+
+    .donate-submit-btn,
+    .donate-form input,
+    .donate-form textarea {
+        transition: none;
+    }
+}
