@@ -1,8 +1,10 @@
 
 package com.example.demo.security;
 
+import java.util.ArrayList;
 import java.util.List;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -25,6 +27,9 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
+    @Value("${cors.allowed-origins:${CORS_ALLOWED_ORIGINS:}}")
+    private String configuredOrigins;
+
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
     }
@@ -38,17 +43,39 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        configuration.setAllowedOrigins(List.of(
-            "https://foodloop-frontend-6j3h.onrender.com",
-            "http://localhost:5173"
-        ));
+        List<String> origins = new ArrayList<>();
+        // Explicitly allow the deployed Render frontend domain
+        origins.add("https://foodloop-frontend-6j3h.onrender.com");
+
+        // Allow any Render static site or preview domain
+        origins.add("https://*.onrender.com");
+
+        // Allow local development origins on any port
+        origins.add("http://localhost:*");
+        origins.add("http://127.0.0.1:*");
+
+        // Add any additional comma-separated origins from environment variables
+        if (configuredOrigins != null && !configuredOrigins.isBlank()) {
+            for (String origin : configuredOrigins.split(",")) {
+                String trimmed = origin.trim();
+                if (!trimmed.isEmpty() && !origins.contains(trimmed)) {
+                    origins.add(trimmed);
+                }
+            }
+        }
+
+        configuration.setAllowedOriginPatterns(origins);
 
         configuration.setAllowedMethods(List.of(
-            "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"
+            "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"
         ));
 
         configuration.setAllowedHeaders(List.of(
-            "Authorization", "Content-Type", "Accept", "Origin"
+            "Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With", "*"
+        ));
+
+        configuration.setExposedHeaders(List.of(
+            "Authorization", "Content-Type"
         ));
 
         configuration.setAllowCredentials(true);
