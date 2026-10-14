@@ -1,232 +1,274 @@
-# FoodLoop Full-Stack Deployment Guide
+# FoodLoop — Complete Production Deployment on Render
 
-This guide describes how to deploy the **FoodLoop** application (Spring Boot backend, React frontend, and hosted MySQL database) to production using:
-- **Render** for the Spring Boot backend (Docker runtime)
-- **Netlify** for the React + Vite frontend
-- **Managed MySQL Provider** (e.g., Aiven, Clever Cloud, Railway, PlanetScale, TiDB Cloud, etc.) for persistent storage
-- **GitHub** repository: `https://github.com/24eg107e55-byte/Foodloop` (branch: `main`)
+This guide provides beginner-friendly, click-by-click instructions for deploying **FoodLoop: A Smart Surplus Food Donation and Community Pickup Management System** entirely on **Render** (Frontend Static Site + Backend Web Service + Persistent MySQL Database).
 
 ---
 
-## 1. Architecture Overview
+## 1. Production Architecture Overview
 
 ```
-+-------------------------------------------------------------+
-|                      Netlify (Frontend)                    |
-|                React 19 + Vite (Single Page App)            |
-|               Deployed at: https://<site>.netlify.app       |
-+------------------------------+------------------------------+
-                               |
-                               | HTTPS REST API Calls
-                               | (Bearer JWT in Authorization)
-                               v
-+-------------------------------------------------------------+
-|                      Render (Backend)                       |
-|           Spring Boot 4.x / Java 21 inside Docker           |
-|         Deployed at: https://<service>.onrender.com        |
-+------------------------------+------------------------------+
-                               |
-                               | JDBC / TLS Connection
-                               v
-+-------------------------------------------------------------+
-|                    Hosted MySQL Database                    |
-|           Tables: users, food_donations, food_requests      |
-+-------------------------------------------------------------+
+                      +-----------------------------+
+                      |       User's Browser        |
+                      +--------------+--------------+
+                                     |
+               HTTPS (Static Assets) | HTTPS (REST API & JWT)
+                                     v
+        +--------------------+                 +--------------------+
+        |  React + Vite App  |                 |  Spring Boot 4 /   |
+        | Render Static Site | --------------> |      Java 21       |
+        |                    |  Bearer <JWT>   | Render Web Service |
+        +--------------------+                 +---------+----------+
+                                                         |
+                                                         | JDBC (TCP / TLS)
+                                                         v
+                                               +--------------------+
+                                               |    MySQL 8.0+      |
+                                               |  (Render Docker /  |
+                                               |  Persistent Disk)  |
+                                               +--------------------+
 ```
 
----
-
-## 2. Step-by-Step Deployment Order
-
-Deploy in this specific sequence to ensure each component has its required dependencies:
-1. **Prepare and Push Code to GitHub**
-2. **Provision Hosted MySQL Database**
-3. **Deploy Backend on Render** (connects to MySQL)
-4. **Deploy Frontend on Netlify** (points to Render URL)
-5. **Update Backend CORS Configuration** (adds Netlify production URL)
-6. **Perform End-to-End Functional Testing**
+- **Frontend**: React 19 + Vite deployed as a **Render Static Site**.
+- **Backend**: Java 21 + Spring Boot 4 + Spring Security + JWT deployed as a **Render Web Service** (Docker).
+- **Database**: MySQL 8.0 instance with persistent disk storage (`/var/lib/mysql`) or a free managed MySQL service.
 
 ---
 
-## 3. Section A: Managed MySQL Database Setup
+## 2. Important Notice Regarding MySQL on Render & Costs
 
-Render does not offer a free native managed MySQL service. Use a cloud MySQL provider such as **Aiven**, **Clever Cloud**, **Railway**, **TiDB Cloud**, or **AWS RDS / DigitalOcean**.
+Render provides **Managed PostgreSQL** by default, but **does NOT** provide a 1-click free managed MySQL database.
 
-### A.1 Provisioning the Database
-1. Sign up for a MySQL cloud database provider (e.g., [Aiven for MySQL](https://aiven.io), [Clever Cloud](https://clever-cloud.com), or [Railway](https://railway.app)).
-2. Create a new MySQL service (MySQL 8.0 or higher recommended).
-3. Record the following connection parameters provided by your host:
-   - **Host / Hostname** (e.g., `mysql-xxxx.aivencloud.com`)
-   - **Port** (e.g., `3306` or assigned port like `15234`)
-   - **Database Name** (e.g., `foodloop` or `defaultdb`)
-   - **Username** (e.g., `avnadmin` or `root`)
-   - **Password** (keep this secret)
+To host MySQL on Render while preserving your existing MySQL schema:
+1. **Option A: Render Custom MySQL Docker Service with Persistent Disk (Official Render approach)**:
+   - Run the official `mysql:8.0` image as a Render **Private Service** (or Web Service).
+   - Attach a Render **Persistent Disk** mounted at `/var/lib/mysql`.
+   - **Cost Requirement**: Render requires a paid instance type (**Starter plan at $7/month**) to attach persistent disks. Disks cost **$0.25/GB/month** (e.g., a 1 GB disk is $0.25/month). 
+   - *Warning*: If you run MySQL on Render's Free tier without a persistent disk, all database data will be erased whenever the container restarts or spins down.
+2. **Option B: Free External Managed MySQL (e.g., Aiven or TiDB Cloud)**:
+   - If you want a **100% free deployment** without paying $7/month, you can create a free MySQL instance on Aiven or TiDB Cloud.
+   - Spring Boot connects using standard MySQL JDBC drivers and environment variables either way.
 
-### A.2 Assembling the JDBC URL
-Construct the Spring Boot JDBC connection URL according to your provider's SSL requirements:
-
-- **Standard SSL (Recommended for most cloud providers):**
-  ```
-  jdbc:mysql://<DB_HOST>:<DB_PORT>/<DB_NAME>?sslMode=REQUIRED
-  ```
-- **If SSL is optional/disabled by provider:**
-  ```
-  jdbc:mysql://<DB_HOST>:<DB_PORT>/<DB_NAME>
-  ```
-
-### A.3 Applying the Schema
-You have two safe options for schema creation:
-
-- **Option 1: Automatic Hibernate Generation (Default)**
-  The backend is configured with `spring.jpa.hibernate.ddl-auto=update`. When the backend starts up connected to your cloud MySQL, Hibernate will automatically create all missing tables (`users`, `food_donations`, `food_requests`) safely without dropping data.
-  
-- **Option 2: Manual Script Execution**
-  You can run the schema migration script manually using MySQL Workbench, DBeaver, or your provider's Web SQL console:
-  Run the queries from [`foodloop-backend/src/main/resources/schema.sql`](file:///foodloop-backend/src/main/resources/schema.sql).
-
-### A.4 Keeping Credentials Secure
-- Never commit passwords or connection URLs to Git.
-- Never place real credentials inside `.env.example` or frontend code.
-- Store credentials only in the hosting provider's secure Environment Variables dashboard.
+Both options are detailed below. Choose whichever suits your budget!
 
 ---
 
-## 4. Section B: Render Backend Deployment (Docker)
+## 3. Pre-Deployment Verification (Completed Locally)
 
-### B.1 Create Render Web Service
-1. Log in to [Render Dashboard](https://dashboard.render.com).
-2. Click **New +** -> **Web Service**.
-3. Connect your GitHub repository: `https://github.com/24eg107e55-byte/Foodloop`.
-4. Choose the following settings:
-   - **Name**: `foodloop-backend` (or your choice)
-   - **Region**: Choose the region closest to your MySQL database
+Antigravity has already verified and prepared your workspace:
+- **Frontend build**: `npm run build` succeeds cleanly in `< 1s` (`foodloop-frontend/dist/`).
+- **Backend build**: `mvnw.cmd package -DskipTests` succeeds cleanly (`target/demo-0.0.1-SNAPSHOT.jar`).
+- **Context & Database integration test**: `mvnw.cmd test` passes 100%.
+- **SPA Routing rewrite**: `foodloop-frontend/public/_redirects` contains `/*  /index.html  200` to prevent 404s on page refresh.
+- **Port handling**: Backend `Dockerfile` and `application.properties` listen dynamically on `${PORT:8080}` as required by Render.
+- **Flexible Database Configuration**: Backend supports both discrete environment variables (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD`) and unified `SPRING_DATASOURCE_URL`.
+- **Health check**: `/api/health`, `/health`, and `/` are publicly accessible for Render health checks without requiring JWT.
+
+---
+
+## 4. Step 1: Push Code to GitHub
+
+Your repository is connected to `https://github.com/24eg107e55-byte/Foodloop.git` on branch `main`.
+
+Open your PowerShell terminal and push the prepared deployment configurations:
+
+```powershell
+cd C:\Users\harin\OneDrive\Desktop\Foodloop
+git add .
+git commit -m "Configure production environment variables and Render deployment files"
+git push origin main
+```
+
+*(Verify your latest commit appears on GitHub).*
+
+---
+
+## 5. Step 2: Set Up MySQL Database
+
+### Option A: MySQL 8 on Render (Docker + Persistent Disk)
+
+1. Log in to your [Render Dashboard](https://dashboard.render.com/).
+2. Click **New +** in the top right and select **Private Service** (or Web Service).
+3. Select **Deploy an existing image from a registry**.
+4. In the **Image URL** field, enter:
+   ```
+   mysql:8.0
+   ```
+5. Click **Next** and configure the service:
+   - **Name**: `foodloop-mysql`
+   - **Region**: Choose a region (e.g., *Oregon* or *Frankfurt*). Make sure your backend Web Service is created in the **exact same region**!
+   - **Instance Type**: **Starter** ($7/mo — required for persistent disks).
+6. Scroll down to **Advanced** and expand **Disks**:
+   - Click **Add Disk**.
+   - **Name**: `mysql-data`
+   - **Mount Path**: `/var/lib/mysql`
+   - **Size**: `1 GB` (or more as desired).
+7. Under **Environment Variables**, add:
+   - `MYSQL_ROOT_PASSWORD`: `<create-a-strong-root-password>`
+   - `MYSQL_DATABASE`: `foodloop`
+   - `MYSQL_USER`: `foodloop_user`
+   - `MYSQL_PASSWORD`: `<create-a-strong-user-password>`
+8. Click **Create Private Service**.
+9. Once running, Render displays an internal service address:
+   `foodloop-mysql:3306`
+
+---
+
+### Option B: Free Cloud-Hosted MySQL (e.g., Aiven Free Tier)
+
+If you prefer 100% free hosting:
+1. Go to [https://aiven.io/](https://aiven.io/) and create a free account.
+2. Click **Create Service** > select **MySQL** > select the free tier/trial.
+3. Service name: `foodloop-mysql`. Click **Create Service**.
+4. From the Service Overview, copy:
+   - **Host**: e.g., `mysql-xxxxxx.aivencloud.com`
+   - **Port**: e.g., `12345`
+   - **User**: `avnadmin`
+   - **Password**: `<your-aiven-password>`
+   - **Database**: `defaultdb` (or create `foodloop` in the Databases tab)
+5. Connection URL format:
+   ```
+   jdbc:mysql://<HOST>:<PORT>/<DATABASE>?sslMode=REQUIRED&allowPublicKeyRetrieval=true
+   ```
+
+---
+
+## 6. Step 3: Deploy Spring Boot Backend on Render
+
+1. Go to the [Render Dashboard](https://dashboard.render.com/).
+2. Click **New +** > select **Web Service**.
+3. Select **Build and deploy from a Git repository**, click **Next**, and choose `24eg107e55-byte/Foodloop`.
+4. Configure service parameters:
+   - **Name**: `foodloop-backend`
+   - **Region**: Select the **same region** where your database resides!
    - **Branch**: `main`
    - **Root Directory**: `foodloop-backend`
    - **Runtime**: `Docker`
    - **Dockerfile Path**: `./Dockerfile`
-   - **Instance Type**: `Free` (or higher)
+   - **Instance Type**: `Free` (or `Starter`)
+5. Under **Environment Variables**, click **Add Environment Variable** and enter:
 
-### B.2 Configure Environment Variables on Render
-Under the **Environment Variables** section on Render, add:
+| Key | Example / Explanation |
+| :--- | :--- |
+| `SPRING_DATASOURCE_URL` | *If using Render Private Service*: `jdbc:mysql://foodloop-mysql:3306/foodloop?createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false`<br>*If using Aiven*: `jdbc:mysql://mysql-xxxx.aivencloud.com:12345/defaultdb?sslMode=REQUIRED&allowPublicKeyRetrieval=true` |
+| `SPRING_DATASOURCE_USERNAME` | `foodloop_user` (or `avnadmin`) |
+| `SPRING_DATASOURCE_PASSWORD` | `<your-database-password>` |
+| `JWT_SECRET` | A secure random 32+ character string (e.g., `FoodLoopSuperSecureProductionSecretKey2026!`) |
+| `CORS_ALLOWED_ORIGINS` | Leave empty or enter `http://localhost:5173` for now. *(You will update this with your frontend URL in Step 5)* |
+| `SPRING_JPA_HIBERNATE_DDL_AUTO` | `update` |
 
-| Key | Value / Description | Example |
-|---|---|---|
-| `SPRING_DATASOURCE_URL` | JDBC connection string to your hosted MySQL | `jdbc:mysql://<DB_HOST>:<DB_PORT>/<DB_NAME>?sslMode=REQUIRED` |
-| `SPRING_DATASOURCE_USERNAME` | Your cloud MySQL user | `<DB_USERNAME>` |
-| `SPRING_DATASOURCE_PASSWORD` | Your cloud MySQL password | `<DB_PASSWORD>` |
-| `JWT_SECRET` | Strong secret key (min 32 characters) | `<Generate strong 32+ char string>` |
-| `CORS_ALLOWED_ORIGINS` | Netlify frontend URL (or leave blank until Netlify URL is ready) | `https://<your-site>.netlify.app` |
-| `SPRING_JPA_HIBERNATE_DDL_AUTO` | Safe schema management strategy | `update` |
-| `SPRING_JPA_SHOW_SQL` | Log SQL queries (optional) | `false` |
+> [!NOTE]
+> Alternatively, you can supply discrete database variables instead of `SPRING_DATASOURCE_URL`:
+> `DB_HOST`: `foodloop-mysql`
+> `DB_PORT`: `3306`
+> `DB_NAME`: `foodloop`
+> `DB_USERNAME`: `foodloop_user`
+> `DB_PASSWORD`: `<your-database-password>`
 
-> **Note on Port**: Render automatically injects the `PORT` environment variable (typically `10000`). The backend's `application.properties` and `Dockerfile` are configured to read `${PORT:8080}` and bind properly to this dynamic port.
-
-### B.3 Deploy and Check Logs
-1. Click **Create Web Service**.
-2. Render will build the multi-stage Docker container (compiling with Maven and Java 21, then running the lightweight JRE 21 runtime).
-3. Monitor the **Logs** tab in Render:
-   - Look for `Started DemoApplication in X.XXX seconds (process running...)`
-   - Look for successful Tomcat initialization on the assigned port.
-
-### B.4 Verify Public Health Check Endpoint
-Once deployed, Render provides a URL (e.g., `https://foodloop-backend.onrender.com`).
-Visit or curl the public health check endpoint:
-```bash
-curl https://<your-render-backend-name>.onrender.com/api/health
-```
-Expected response:
-```json
-{
-  "status": "UP",
-  "service": "FoodLoop Backend",
-  "timestamp": 1728738400000
-}
-```
+6. Click **Create Web Service**.
+7. Render will build the Docker container and start your Spring Boot application.
+8. Once the log displays `Started DemoApplication in ... seconds`, copy your backend URL:
+   `https://foodloop-backend.onrender.com`
+9. Test the health endpoint in your browser:
+   `https://foodloop-backend.onrender.com/api/health`
+   **Expected Response:** `{"status":"UP","service":"FoodLoop Backend","timestamp":...}`
 
 ---
 
-## 5. Section C: Netlify Frontend Deployment
+## 7. Step 4: Deploy React Frontend on Render
 
-### C.1 Create Netlify Site
-1. Log in to [Netlify](https://app.netlify.com).
-2. Click **Add new site** -> **Import an existing project**.
-3. Select **GitHub** and authorize access to `24eg107e55-byte/Foodloop`.
-4. Configure the build settings:
-   - **Branch to deploy**: `main`
-   - **Base directory**: `foodloop-frontend`
-   - **Build command**: `npm run build`
-   - **Publish directory**: `foodloop-frontend/dist` (or `dist` if relative to base)
-
-### C.2 Configure Environment Variables on Netlify
-In **Site Configuration** -> **Environment Variables**, add:
-
-| Key | Value | Description |
-|---|---|---|
-| `VITE_API_BASE_URL` | `https://<your-render-backend-name>.onrender.com` | Base URL of your deployed Render backend (no trailing slash) |
-
-### C.3 SPA Routing Redirects
-The project includes both [`foodloop-frontend/public/_redirects`](file:///foodloop-frontend/public/_redirects) and [`foodloop-frontend/netlify.toml`](file:///foodloop-frontend/netlify.toml) configured with:
-```
-/*    /index.html   200
-```
-This ensures refreshing nested routes like `/dashboard`, `/available-food`, `/login`, or `/my-donations` will not result in a Netlify 404 error.
-
-### C.4 Deploy Frontend
-1. Click **Deploy Foodloop**.
-2. Once the deployment finishes, Netlify provides your live site URL (e.g., `https://foodloop-smart.netlify.app`).
+1. Go to the [Render Dashboard](https://dashboard.render.com/).
+2. Click **New +** > select **Static Site**.
+3. Select your repository `24eg107e55-byte/Foodloop`.
+4. Configure the settings:
+   - **Name**: `foodloop-frontend`
+   - **Branch**: `main`
+   - **Root Directory**: `foodloop-frontend`
+   - **Build Command**: `npm run build`
+   - **Publish Directory**: `dist`
+5. Under **Environment Variables**, add:
+   - `VITE_API_BASE_URL`: `https://foodloop-backend.onrender.com` *(use your actual backend URL from Step 3, without trailing slash)*
+6. Under **Redirects / Rewrites** (or let `_redirects` handle it):
+   - Render automatically picks up `public/_redirects` which contains `/* /index.html 200`.
+   - Optionally, you can also add a rule in the Render UI:
+     - **Source**: `/*`
+     - **Destination**: `/index.html`
+     - **Action**: `Rewrite`
+7. Click **Create Static Site**.
+8. Render will run `npm run build` and publish your site at a URL like:
+   `https://foodloop-frontend.onrender.com`
 
 ---
 
-## 6. Section D: Final Integration & CORS Setup
+## 8. Step 5: Update Backend CORS with Frontend URL
 
-### D.1 Authorize Netlify in Render CORS
-1. Copy your live Netlify URL (e.g., `https://foodloop-smart.netlify.app`).
-2. Go to your Render backend service -> **Environment**.
-3. Set or update the `CORS_ALLOWED_ORIGINS` variable:
+Now that your frontend URL is live:
+1. Copy your frontend URL (e.g., `https://foodloop-frontend.onrender.com`).
+2. Go to your Render Dashboard > select `foodloop-backend` > **Environment**.
+3. Edit `CORS_ALLOWED_ORIGINS` to include your frontend URL:
    ```
-   CORS_ALLOWED_ORIGINS=https://<your-actual-netlify-subdomain>.netlify.app
+   https://foodloop-frontend.onrender.com,http://localhost:5173
    ```
-   *(If you have custom domains or multiple preview URLs, separate them with commas: e.g. `https://foodloop.netlify.app,https://mycustomdomain.com`)*.
-4. Render will trigger a quick redeployment with the new environment variable.
+4. Click **Save Changes**. Render will automatically redeploy the backend in 10–20 seconds with the updated CORS policy.
 
 ---
 
-## 7. Section E: End-to-End Verification Checklist
+## 9. Step 6: End-to-End Testing & Verification
 
-Test the complete application online through your Netlify URL:
+Open your live frontend URL (`https://foodloop-frontend.onrender.com`) in an Incognito window:
 
 1. **User Registration**:
-   - Register a new **Donor** account (`donor@example.com`).
-   - Register a new **Receiver** account (`receiver@example.com`).
-   - Verify success messages and database persistence.
-2. **User Authentication**:
-   - Log in as the donor; verify redirection to the Dashboard and JWT token stored in browser localStorage.
-3. **Donor Flow**:
-   - Click **Donate Food**. Fill in food type, quantity, pickup location, description, and pickup deadline.
-   - Click **Submit**. Verify success message.
-   - Go to **My Donations**; confirm the donation appears with status `AVAILABLE`.
-4. **Receiver Flow**:
-   - Log out and log in as the receiver.
-   - Go to **Available Food**; verify the donated meal is visible.
-   - Click **Request this food**. Verify success message and state update.
-   - Go to **My Food Requests**; confirm request appears with status `PENDING`.
-5. **Donor Approval Flow**:
-   - Log out and log in back as the donor.
-   - Go to **Manage Requests** (`/donor-requests`).
-   - View the pending request from the receiver and click **✓ Approve**.
-   - Confirm the request updates to `APPROVED` and the donation status changes to `UNAVAILABLE`.
-6. **Data Persistence**:
-   - In Render, restart the backend service.
-   - Reload your Netlify frontend; verify that users, donations, and requests remain persisted in the hosted MySQL database.
+   - Register a donor: `donor@foodloop.org` (Role: `DONOR`).
+   - Register a receiver: `receiver@foodloop.org` (Role: `RECEIVER`).
+2. **User Login & JWT Verification**:
+   - Log in with `donor@foodloop.org`.
+   - Open Developer Tools > **Application** > **Local Storage** > Verify `user` contains a valid JWT `token`.
+3. **Donor Action (Create Food Listing)**:
+   - Navigate to `/donate`.
+   - Submit a surplus food item (e.g., *Rice & Curry*, *15 packets*, *Community Center*).
+   - Check `/my-donations` to confirm the listing appears with status `AVAILABLE`.
+4. **Receiver Action (Request Food)**:
+   - Log out and log in as `receiver@foodloop.org`.
+   - Navigate to `/available-food`.
+   - Confirm the donor listing is visible.
+   - Click **Request Food**.
+   - Check `/my-requests` to verify the request is recorded with status `PENDING`.
+5. **Donor Action (Approve Request)**:
+   - Log back in as `donor@foodloop.org`.
+   - Navigate to `/donor-requests`.
+   - Locate the pending request and click **Approve**.
+   - Verify the request status updates to `APPROVED` and the food item status changes to `UNAVAILABLE`.
+6. **Data Persistence Check**:
+   - In Render, click **Manual Deploy** > **Restart Service** on both backend and database.
+   - Reload your frontend and log back in.
+   - Confirm that users, donations, and requests remain persisted in the database.
 
 ---
 
-## 8. Section F: Troubleshooting
+## 10. Database Schema & Data Migration (Export / Import)
 
-| Issue | Likely Cause | Resolution |
-|---|---|---|
-| **CORS Error in Browser Console** | Backend does not recognize frontend origin | Ensure `CORS_ALLOWED_ORIGINS` in Render matches your exact Netlify URL (including `https://`, no trailing slash). |
-| **Backend fails on startup (Database connection error)** | Incorrect JDBC URL, credentials, or cloud MySQL firewall | 1. Verify hostname, port, database name, and password.<br>2. Add `?sslMode=REQUIRED` to the JDBC URL for cloud providers like Aiven/Railway.<br>3. Check if your database provider requires whitelisting IP addresses (set allowed IPs to `0.0.0.0/0` if applicable). |
-| **Frontend API calls go to localhost** | `VITE_API_BASE_URL` was not set before building on Netlify | Add `VITE_API_BASE_URL` in Netlify environment variables and trigger **Trigger deploy -> Clear cache and deploy site**. |
-| **Page refresh on Netlify shows 404** | Missing SPA rewrite rule | Ensure `foodloop-frontend/public/_redirects` exists and contains `/* /index.html 200`. |
-| **Render Docker build failure** | Maven build error | Verify Java 21 is used. Check the multi-stage Dockerfile and test locally with `.\mvnw.cmd package -DskipTests`. |
+If you have existing test data in your local MySQL instance that you wish to export to production:
+
+### Export from Local MySQL:
+```powershell
+mysqldump -u root -p foodloop > foodloop_backup.sql
+```
+
+### Import into Hosted MySQL:
+```powershell
+# For Render private service (via port-forward or direct connection):
+mysql -h <HOST> -P <PORT> -u <USER> -p <DATABASE> < foodloop_backup.sql
+```
+
+*(Note: Hibernate with `spring.jpa.hibernate.ddl-auto=update` automatically generates tables on startup if starting fresh, so manual import is only needed if migrating existing rows).*
+
+---
+
+## 11. Troubleshooting Common Issues
+
+| Issue | Likely Cause | Solution |
+| :--- | :--- | :--- |
+| **CORS error in browser console** | Frontend origin missing from `CORS_ALLOWED_ORIGINS` | Verify `CORS_ALLOWED_ORIGINS` in Render matches your exact frontend URL (including `https://`, no trailing slash). |
+| **Backend fails on startup (`Communications link failure`)** | Database host/port unreachable or SSL mismatch | 1. Ensure backend and database are in the same Render region.<br>2. For internal Render networking, use `foodloop-mysql:3306`.<br>3. For external providers like Aiven, add `?sslMode=REQUIRED` to the JDBC URL. |
+| **Frontend calls `http://localhost:8080` in production** | `VITE_API_BASE_URL` was unset during build | Ensure `VITE_API_BASE_URL` is set in the Render Static Site environment variables, then click **Manual Deploy** > **Clear build cache & deploy**. |
+| **Page refresh returns 404** | Missing client-side route rewrite | Render Static Sites reads `public/_redirects` (`/* /index.html 200`). Alternatively, add a Rewrite rule in Render's **Redirects/Rewrites** tab (`/*` -> `/index.html`). |
+| **Render Web Service slow on first load** | Free tier spin-down | Render free tier web services spin down after 15 minutes of inactivity. The first wake-up takes ~30–50 seconds. This is normal on the free tier. |
